@@ -1,0 +1,19 @@
+# aerogesture configuration
+# Copy to ~/.config/aerogesture/config.toml
+
+[gesture]
+# Number of fingers for swipe gesture (3 or 4)
+fingers = 3
+
+# Sensitivity multiplier (lower = more sensitive, default 1.0)
+sensitivity = 1.0
+
+# Natural (trackpad-like) direction: swipe right → previous workspace
+natural_direction = true
+
+[workspace]
+# Wrap around at the ends of the workspace list
+wrap_around = false
+
+# Skip workspaces with no windows
+skip_empty = false
