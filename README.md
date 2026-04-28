@@ -28,7 +28,13 @@ brew install derangga/formulae/aerogesture
 
 ### Nix Darwin (Flakes)
 
-Add AeroGesture to your `flake.nix`:
+You can run it directly without installing:
+
+```bash
+nix run github:derangga/aerospacegesture
+```
+
+Or add it to your nix-darwin `flake.nix`:
 
 ```nix
 {
@@ -57,6 +63,53 @@ git clone https://github.com/derangga/aerospacegesture.git
 cd aerospacegesture
 swift build -c release
 cp -f .build/release/aerogesture /usr/local/bin/
+```
+
+## Getting Started
+
+After installation, follow these steps to get AeroGesture running.
+
+### 1. Grant Accessibility Permission
+
+AeroGesture uses macOS event taps to detect trackpad gestures. This requires Accessibility permission.
+
+1. Open **System Settings > Privacy & Security > Accessibility**
+2. Click the `+` button
+3. Add the aerogesture binary:
+   - Homebrew: `/opt/homebrew/bin/aerogesture` (Apple Silicon) or `/usr/local/bin/aerogesture` (Intel)
+   - Build from source: `/usr/local/bin/aerogesture`
+4. Make sure the toggle is **enabled**
+
+> **Note**: macOS tracks permissions per binary identity. If you switch between a local build and Homebrew (or upgrade via Homebrew), you may need to remove the old entry and re-add the new binary.
+
+### 2. Create Your Config
+
+```bash
+mkdir -p ~/.config/aerogesture
+cp $(brew --prefix)/etc/aerogesture/config.toml.example ~/.config/aerogesture/config.toml
+```
+
+If you built from source, copy from the repo instead:
+
+```bash
+mkdir -p ~/.config/aerogesture
+cp config.toml.example ~/.config/aerogesture/config.toml
+```
+
+Edit `~/.config/aerogesture/config.toml` to match your workspace setup (see [Configuration](#configuration) below).
+
+### 3. Run AeroGesture
+
+Run directly in the foreground:
+
+```bash
+aerogesture
+```
+
+Or start as a background service (auto-starts on login):
+
+```bash
+brew services start aerogesture
 ```
 
 ## Configuration
