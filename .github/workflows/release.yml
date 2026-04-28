@@ -123,7 +123,7 @@ jobs:
       - name: Push formula to tap
         uses: dmnemec/copy_file_to_another_repo_action@main
         env:
-          API_TOKEN_GITHUB: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          API_TOKEN_GITHUB: ${{ secrets.TAP_GITHUB_TOKEN }}
         with:
           source_file: aerogesture.rb
           destination_repo: derangga/homebrew-formulae
