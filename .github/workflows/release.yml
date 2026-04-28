@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            sdk_arch: arm64
+          - arch: x86_64
+            sdk_arch: x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release binary
+        run: |
+          swift build -c release --arch ${{ matrix.sdk_arch }}
+
+      - name: Package binary
+        run: |
+          BINARY=".build/release/aerogesture"
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARCHIVE="aerogesture_${VERSION}_macos_${{ matrix.arch }}.tar.gz"
+          tar -czf "$ARCHIVE" -C .build/release aerogesture
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+          shasum -a 256 "$ARCHIVE" | awk '{print $1}' > "${ARCHIVE}.sha256"
+          echo "SHA256=$(cat ${ARCHIVE}.sha256)" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.arch }}
+          path: |
+            aerogesture_*.tar.gz
+            aerogesture_*.tar.gz.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            aerogesture_*.tar.gz
+            aerogesture_*.tar.gz.sha256
+
+  update-homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Homebrew formula
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          REPO="derangga/aerospacegesture"
+
+          ARM64_URL="https://github.com/${REPO}/releases/download/${GITHUB_REF_NAME}/aerogesture_${VERSION}_macos_arm64.tar.gz"
+          X86_64_URL="https://github.com/${REPO}/releases/download/${GITHUB_REF_NAME}/aerogesture_${VERSION}_macos_x86_64.tar.gz"
+
+          # Download archives to compute sha256
+          curl -sL "$ARM64_URL" -o arm64.tar.gz
+          curl -sL "$X86_64_URL" -o x86_64.tar.gz
+          SHA_ARM64=$(sha256sum arm64.tar.gz | awk '{print $1}')
+          SHA_X86_64=$(sha256sum x86_64.tar.gz | awk '{print $1}')
+
+          cat > aerogesture.rb << FORMULA
+          # typed: false
+          # frozen_string_literal: true
+
+          class Aerogesture < Formula
+            desc "CLI daemon for trackpad swipe gestures to switch AeroSpace workspaces"
+            homepage "https://github.com/${REPO}"
+            version "${VERSION}"
+            license "MIT"
+
+            depends_on :macos
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "${ARM64_URL}"
+                sha256 "${SHA_ARM64}"
+              end
+              if Hardware::CPU.intel?
+                url "${X86_64_URL}"
+                sha256 "${SHA_X86_64}"
+              end
+            end
+
+            def install
+              bin.install "aerogesture"
+            end
+
+            service do
+              run [opt_bin/"aerogesture"]
+              keep_alive true
+              log_path var/"log/aerogesture.stdout.log"
+              error_log_path var/"log/aerogesture.stderr.log"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/aerogesture --version")
+            end
+          end
+          FORMULA
+
+          # Remove leading whitespace from heredoc
+          sed -i 's/^          //' aerogesture.rb
+
+      - name: Push formula to tap
+        uses: dmnemec/copy_file_to_another_repo_action@main
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        with:
+          source_file: aerogesture.rb
+          destination_repo: derangga/homebrew-formulae
+          destination_branch: main
+          user_email: github-actions[bot]@users.noreply.github.com
+          user_name: github-actions[bot]
+          commit_message: "Brew formula update for aerogesture version ${{ github.ref_name }}"
