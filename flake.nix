@@ -6,8 +6,14 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachSystem [ "aarch64-darwin" "x86_64-darwin" ] (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
+    flake-utils.lib.eachSystem [ "aarch64-darwin" "x86_64-darwin" ] (
+      system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
@@ -23,11 +29,15 @@
       {
         packages.default = pkgs.stdenv.mkDerivation {
           pname = "aerogesture";
-          version = "0.1.0";
+          version = "0.1.1";
 
           src = ./.;
 
-          nativeBuildInputs = [ pkgs.swift pkgs.swiftpm pkgs.git ];
+          nativeBuildInputs = [
+            pkgs.swift
+            pkgs.swiftpm
+            pkgs.git
+          ];
 
           buildInputs = [ pkgs.apple-sdk_14 ];
 
@@ -90,7 +100,10 @@
             description = "macOS daemon for trackpad swipe gestures to switch AeroSpace workspaces";
             homepage = "https://github.com/derangga/aerogesture";
             license = licenses.mit;
-            platforms = [ "aarch64-darwin" "x86_64-darwin" ];
+            platforms = [
+              "aarch64-darwin"
+              "x86_64-darwin"
+            ];
             mainProgram = "aerogesture";
           };
         };
