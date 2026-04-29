@@ -1,6 +1,6 @@
 import Foundation
 
-let version = "0.1.0"
+let version = "0.1.2"
 let pidPath = "/tmp/aerogesture.pid"
 
 // MARK: - CLI argument parsing
