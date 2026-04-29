@@ -81,7 +81,12 @@ final class AeroSpaceSocket {
     @discardableResult
     func runCommand(_ args: [String], stdin: String = "", retry: Bool = false) -> Result<String, SwipeError> {
         guard fd >= 0 else {
-            return .failure(.socketError("Not connected"))
+            if retry {
+                return .failure(.socketError("Not connected after reconnect"))
+            }
+            fputs("aerogesture: not connected, attempting to connect...\n", stderr)
+            connect()
+            return runCommand(args, stdin: stdin, retry: true)
         }
 
         do {
