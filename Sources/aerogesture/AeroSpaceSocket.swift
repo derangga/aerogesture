@@ -1,5 +1,9 @@
 import Foundation
 
+// AeroSpace 0.21+ socket wire protocol: version handshake + length-prefixed frames.
+// Must match SOCKET_PROTOCOL_VERSION in AeroSpace/Sources/Common/model/clientServer.swift.
+private let SOCKET_PROTOCOL_VERSION: UInt32 = 1
+
 enum SwipeError: Error {
     case socketError(String)
     case commandFail(String)
@@ -68,7 +72,55 @@ final class AeroSpaceSocket {
             fputs("aerogesture: failed to connect to AeroSpace at \(socketPath): \(String(cString: strerror(errno)))\n", stderr)
             Darwin.close(fd)
             fd = -1
+            return
         }
+
+        // Protocol handshake: send our version, server replies with its version.
+        guard writeUInt32(SOCKET_PROTOCOL_VERSION),
+              let serverVersion = readUInt32(),
+              serverVersion == SOCKET_PROTOCOL_VERSION else {
+            fputs("aerogesture: AeroSpace socket handshake failed (protocol version mismatch — restart AeroSpace?)\n", stderr)
+            Darwin.close(fd)
+            fd = -1
+            return
+        }
+    }
+
+    // MARK: - Framing primitives (little-endian length prefix, native byte order)
+
+    private func writeAll(_ data: Data) -> Bool {
+        data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Bool in
+            guard let base = raw.baseAddress else { return true } // empty payload
+            var total = 0
+            while total < data.count {
+                let n = Darwin.write(fd, base + total, data.count - total)
+                if n <= 0 { return false }
+                total += n
+            }
+            return true
+        }
+    }
+
+    private func readExactly(_ count: Int) -> Data? {
+        if count == 0 { return Data() }
+        var data = Data()
+        var buf = [UInt8](repeating: 0, count: count)
+        while data.count < count {
+            let n = buf.withUnsafeMutableBytes { Darwin.read(fd, $0.baseAddress, count - data.count) }
+            if n <= 0 { return nil }
+            data.append(contentsOf: buf[0..<n])
+        }
+        return data
+    }
+
+    private func writeUInt32(_ value: UInt32) -> Bool {
+        var v = value
+        return withUnsafeBytes(of: &v) { writeAll(Data($0)) }
+    }
+
+    private func readUInt32() -> UInt32? {
+        guard let d = readExactly(4) else { return nil }
+        return d.withUnsafeBytes { $0.load(as: UInt32.self) }
     }
 
     func disconnect() {
@@ -91,32 +143,16 @@ final class AeroSpaceSocket {
 
         do {
             let request = ClientRequest(args: args, stdin: stdin)
-            let data = try JSONEncoder().encode(request)
+            let payload = try JSONEncoder().encode(request)
 
-            // Write request
-            let written = data.withUnsafeBytes { buf in
-                Darwin.write(fd, buf.baseAddress!, buf.count)
-            }
-            guard written == data.count else {
+            // Write request: UInt32 length prefix + JSON payload
+            guard writeUInt32(UInt32(payload.count)), writeAll(payload) else {
                 throw SwipeError.socketError("write failed")
             }
 
-            // Read response
-            var responseData = Data()
-            let bufSize = 4096
-            let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufSize)
-            defer { buffer.deallocate() }
-
-            while true {
-                let bytesRead = Darwin.read(fd, buffer, bufSize)
-                if bytesRead > 0 {
-                    responseData.append(buffer, count: bytesRead)
-                    if bytesRead < bufSize { break }
-                } else if bytesRead == 0 {
-                    break
-                } else {
-                    throw SwipeError.socketError("read failed: \(String(cString: strerror(errno)))")
-                }
+            // Read response: UInt32 length prefix + JSON payload
+            guard let len = readUInt32(), let responseData = readExactly(Int(len)) else {
+                throw SwipeError.socketError("read failed")
             }
 
             let answer = try JSONDecoder().decode(ServerAnswer.self, from: responseData)
