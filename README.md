@@ -118,10 +118,10 @@ Create your config file at `~/.config/aerogesture/config.toml`:
 
 ```toml
 [gesture]
-# Number of fingers for swipe gesture (3 or 4)
+# Number of fingers for swipe gesture (3 to 5)
 fingers = 3
 
-# Sensitivity multiplier (lower = more sensitive)
+# Sensitivity multiplier, must be greater than 0 (lower = more sensitive)
 sensitivity = 1.0
 
 # Natural (trackpad-like) direction: swipe right -> previous workspace
@@ -134,6 +134,8 @@ wrap_around = false
 # Skip workspaces with no windows
 skip_empty = false
 ```
+
+Every key is optional. A missing key or table uses the default shown above, so a file containing only `[gesture]` and `fingers = 4` is valid. `fingers` outside 3 to 5 or a `sensitivity` of 0 or less is rejected. At startup the daemon then logs the reason and uses the defaults. On reload it logs the reason and keeps the running config.
 
 A full example is available in [`config.toml.example`](config.toml.example).
 
@@ -168,6 +170,8 @@ Reload the config without restarting:
 ```bash
 aerogesture --reload
 ```
+
+Only one instance runs at a time. A second instance exits with "already running", and `--reload` exits with status 1 when no instance holds `/tmp/aerogesture.pid`.
 
 ### View logs
 

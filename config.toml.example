@@ -1,11 +1,12 @@
 # aerogesture configuration
 # Copy to ~/.config/aerogesture/config.toml
+# Every key is optional. Missing keys and tables use the defaults.
 
 [gesture]
-# Number of fingers for swipe gesture (3 or 4)
+# Number of fingers for swipe gesture (3 to 5)
 fingers = 3
 
-# Sensitivity multiplier (lower = more sensitive, default 1.0)
+# Sensitivity multiplier, must be greater than 0 (lower = more sensitive, default 1.0)
 sensitivity = 1.0
 
 # Natural (trackpad-like) direction: swipe right → previous workspace

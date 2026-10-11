@@ -17,9 +17,11 @@ Single-target executable with flat source layout in `Sources/aerogesture/`:
 | File | Responsibility |
 |------|---------------|
 | `main.swift` | Entry point, CLI args, signal handling, PID file |
-| `GestureDetector.swift` | Trackpad gesture detection (Direction, GestureState, SwipeAxis enums + GestureDetector class) |
-| `AeroSpaceSocket.swift` | IPC with AeroSpace via Unix socket (ClientRequest/ServerAnswer, SwipeError) |
-| `Config.swift` | TOML config loading (GestureConfig, WorkspaceConfig, Config structs via Codable) |
+| `GestureDetector.swift` | Event tap, converts NSTouch to TouchSample and calls SwipeRecognizer |
+| `SwipeRecognizer.swift` | Pure swipe state machine (Direction, SwipeAxis, TouchSample, SwipeRecognizer) |
+| `AeroSpaceSocket.swift` | IPC with AeroSpace via Unix socket on a serial queue, 1 s timeouts, 1 MB reply cap (ClientRequest/ServerAnswer, SwipeError) |
+| `Config.swift` | TOML config loading with per-key defaults and validation (GestureConfig, WorkspaceConfig, Config, ConfigError) |
+| `InstanceLock.swift` | flock on the PID file for single instance and stale `--reload` detection |
 | `AccessibilityCheck.swift` | macOS accessibility permission verification |
 
 Config lives at `~/.config/aerogesture/config.toml` (see `config.toml.example` for schema).
@@ -56,8 +58,9 @@ tail -f /tmp/aerogesture.stderr.log
 After any code change, always run:
 ```bash
 swift build
+swift test
 ```
-No test suite or linter is configured yet. Compilation is the quality gate.
+Tests live in `Tests/aerogestureTests` and cover SwipeRecognizer, config decoding and validation, and workspace argument building. No linter is configured.
 
 ---
 

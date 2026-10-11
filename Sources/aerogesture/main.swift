@@ -46,20 +46,37 @@ while let arg = args.first {
 checkAccessibilityPermissions()
 
 let configPath = Config.resolvedPath(override: configOverride)
-var config = Config.load(from: configPath)
-fputs("aerogesture: loaded config from \(configPath.path)\n", stderr)
+var initialConfig = Config.defaults
+do {
+    initialConfig = try Config.load(from: configPath)
+    fputs("aerogesture: loaded config from \(configPath.path)\n", stderr)
+} catch ConfigError.missing {
+    fputs("aerogesture: no config at \(configPath.path), using defaults\n", stderr)
+} catch {
+    fputs("aerogesture: warning: \(error) in \(configPath.path), using defaults\n", stderr)
+}
 
-// Write PID file
-writePID()
+do {
+    _ = try InstanceLock.acquire(path: pidPath)
+} catch InstanceLockError.held {
+    fputs("aerogesture: already running\n", stderr)
+    exit(1)
+} catch {
+    fputs("aerogesture: cannot lock \(pidPath): \(error)\n", stderr)
+    exit(1)
+}
+
+// A write to a closed AeroSpace socket must return EPIPE, not kill the daemon
+signal(SIGPIPE, SIG_IGN)
 
 // Set up socket
 let socket = AeroSpaceSocket()
 socket.connect()
 
-// Set up gesture detector
-let detector = GestureDetector(config: config)
+// Set up gesture detector. Only the main queue touches detector.config.
+let detector = GestureDetector(config: initialConfig)
 detector.onSwipe = { direction in
-    socket.switchWorkspace(direction: direction, config: config)
+    socket.requestSwitch(direction: direction, config: detector.config.workspace)
 }
 
 // MARK: - Signal handling
@@ -68,12 +85,12 @@ let sighupSource = DispatchSource.makeSignalSource(signal: SIGHUP, queue: .main)
 signal(SIGHUP, SIG_IGN)
 sighupSource.setEventHandler {
     fputs("aerogesture: reloading config...\n", stderr)
-    config = Config.load(from: configPath)
-    detector.config = config
-    detector.onSwipe = { direction in
-        socket.switchWorkspace(direction: direction, config: config)
+    do {
+        detector.config = try Config.load(from: configPath)
+        fputs("aerogesture: config reloaded\n", stderr)
+    } catch {
+        fputs("aerogesture: reload failed (\(error)), keeping current config\n", stderr)
     }
-    fputs("aerogesture: config reloaded\n", stderr)
 }
 sighupSource.resume()
 
@@ -81,7 +98,6 @@ func cleanShutdown() {
     fputs("aerogesture: shutting down...\n", stderr)
     detector.stop()
     socket.disconnect()
-    removePID()
     exit(0)
 }
 
@@ -103,20 +119,9 @@ CFRunLoopRun()
 
 // MARK: - Helpers
 
-func writePID() {
-    let pid = "\(ProcessInfo.processInfo.processIdentifier)"
-    try? pid.write(toFile: pidPath, atomically: true, encoding: .utf8)
-}
-
-func removePID() {
-    try? FileManager.default.removeItem(atPath: pidPath)
-}
-
 func reloadRunningInstance() {
-    guard let pidStr = try? String(contentsOfFile: pidPath, encoding: .utf8),
-          let pid = Int32(pidStr.trimmingCharacters(in: .whitespacesAndNewlines))
-    else {
-        fputs("aerogesture: no running instance found (no PID file at \(pidPath))\n", stderr)
+    guard let pid = InstanceLock.runningPID(path: pidPath) else {
+        fputs("aerogesture: no running instance found (nothing holds \(pidPath))\n", stderr)
         exit(1)
     }
     if kill(pid, SIGHUP) == 0 {
