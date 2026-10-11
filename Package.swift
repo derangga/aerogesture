@@ -17,5 +17,10 @@ let package = Package(
                 .linkedFramework("ApplicationServices"),
             ]
         ),
+        .testTarget(
+            name: "aerogestureTests",
+            dependencies: ["aerogesture"],
+            path: "Tests/aerogestureTests"
+        ),
     ]
 )

@@ -2,42 +2,13 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-enum Direction {
-    case next
-    case prev
-
-    var value: String {
-        switch self {
-        case .next: "next"
-        case .prev: "prev"
-        }
-    }
-}
-
-enum GestureState {
-    case began
-    case ended
-}
-
-enum SwipeAxis {
-    case undecided
-    case horizontal
-    case vertical
-}
-
 final class GestureDetector {
     var config: Config
     var onSwipe: ((Direction) -> Void)?
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
-    private var accDisX: Float = 0
-    private var accDisY: Float = 0
-    private var prevTouchPositions: [String: NSPoint] = [:]
-    private var state: GestureState = .ended
-    private var swipeAxis: SwipeAxis = .undecided
-    private var activeFingerCount: Int = 0
-    private var gestureAlreadyFired: Bool = false
+    private var recognizer = SwipeRecognizer()
 
     init(config: Config) {
         self.config = config
@@ -75,7 +46,7 @@ final class GestureDetector {
             if let source = runLoopSource {
                 CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
             }
-            // CFMachPort doesn't need explicit close — it's invalidated when removed
+            CFMachPortInvalidate(tap)
         }
         eventTap = nil
         runLoopSource = nil
@@ -104,134 +75,30 @@ final class GestureDetector {
         let touches = nsEvent.allTouches()
         if touches.isEmpty { return }
 
-        let touchesCount = touches.allSatisfy({ $0.phase == .ended }) ? 0 : touches.count
-        if touchesCount == 0 {
-            stopGesture()
-        } else {
-            processTouches(touches: touches, count: touchesCount)
-        }
-    }
-
-    private func stopGesture() {
-        if state == .began {
-            state = .ended
-            if swipeAxis != .vertical && !gestureAlreadyFired {
-                handleGesture()
-            }
-            clearEventState()
-        }
-    }
-
-    private func processTouches(touches: Set<NSTouch>, count: Int) {
-        let requiredFingers = config.gesture.fingers
-
-        if state != .began && count == requiredFingers {
-            state = .began
-            activeFingerCount = count
-        }
-        if state == .began && swipeAxis == .undecided {
-            activeFingerCount = count
-        }
-
-        guard state == .began else { return }
-
-        let (disX, disY) = swipeDistance(touches: touches)
-        accDisX += disX
-        accDisY += disY
-
-        // Lock axis once we have enough movement
-        if swipeAxis == .undecided {
-            let threshold = config.internalThreshold * 0.3
-            if abs(accDisX) > threshold || abs(accDisY) > threshold {
-                swipeAxis = abs(accDisY) > abs(accDisX) ? .vertical : .horizontal
-            }
-        }
-
-        // Fire single workspace switch when threshold crossed
-        if swipeAxis == .horizontal && !gestureAlreadyFired {
-            let threshold = config.internalThreshold
-            if abs(accDisX) >= threshold {
-                gestureAlreadyFired = true
-                let direction: Direction
-                if config.gesture.naturalDirection {
-                    direction = accDisX > 0 ? .prev : .next
-                } else {
-                    direction = accDisX > 0 ? .next : .prev
-                }
-                onSwipe?(direction)
-            }
-        }
-    }
-
-    private func handleGesture() {
-        let threshold = config.internalThreshold
-        guard abs(accDisX) >= threshold else { return }
-
-        let direction: Direction
-        if config.gesture.naturalDirection {
-            direction = accDisX > 0 ? .prev : .next
-        } else {
-            direction = accDisX > 0 ? .next : .prev
-        }
-        onSwipe?(direction)
-    }
-
-    private func clearEventState() {
-        accDisX = 0
-        accDisY = 0
-        swipeAxis = .undecided
-        activeFingerCount = 0
-        gestureAlreadyFired = false
-        prevTouchPositions.removeAll()
-    }
-
-    // MARK: - Touch distance calculation
-
-    private func swipeDistance(touches: Set<NSTouch>) -> (Float, Float) {
-        var allRight = true
-        var allLeft = true
-        var allUp = true
-        var allDown = true
-        var sumDisX: Float = 0
-        var sumDisY: Float = 0
-        var activeTouches = 0
-
-        for touch in touches {
-            let (disX, disY) = touchDistance(touch)
-            allRight = allRight && disX >= 0
-            allLeft = allLeft && disX <= 0
-            allUp = allUp && disY >= 0
-            allDown = allDown && disY <= 0
-            sumDisX += disX
-            sumDisY += disY
-
+        let samples = touches.map { touch in
+            let phase: TouchSample.Phase
             if touch.phase == .ended {
-                prevTouchPositions.removeValue(forKey: "\(touch.identity)")
+                phase = .ended
+            } else if touch.phase == .cancelled {
+                phase = .cancelled
             } else {
-                prevTouchPositions["\(touch.identity)"] = touch.normalizedPosition
-                activeTouches += 1
+                phase = .active
             }
+            return TouchSample(
+                id: touch.identity.hash,
+                x: Float(touch.normalizedPosition.x),
+                y: Float(touch.normalizedPosition.y),
+                phase: phase
+            )
         }
 
-        let count = max(activeTouches, 1)
-        var resultX = sumDisX / Float(count)
-        var resultY = sumDisY / Float(count)
-
-        // All fingers must move in the same direction
-        if !allRight && !allLeft { resultX = 0 }
-        if !allUp && !allDown { resultY = 0 }
-
-        return (resultX, resultY)
-    }
-
-    private func touchDistance(_ touch: NSTouch) -> (Float, Float) {
-        guard let prevPosition = prevTouchPositions["\(touch.identity)"] else {
-            return (0, 0)
+        if let direction = recognizer.feed(
+            samples,
+            fingers: config.gesture.fingers,
+            threshold: config.internalThreshold,
+            naturalDirection: config.gesture.naturalDirection
+        ) {
+            onSwipe?(direction)
         }
-        let position = touch.normalizedPosition
-        return (
-            Float(position.x - prevPosition.x),
-            Float(position.y - prevPosition.y)
-        )
     }
 }
