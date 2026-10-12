@@ -1,16 +1,16 @@
 # AeroGesture
 
-A lightweight, CLI-based macOS daemon that detects trackpad swipe gestures and translates them into workspace-switching commands for [AeroSpace](https://github.com/nikitabobko/AeroSpace) — the tiling window manager for macOS.
+A lightweight, CLI-based macOS daemon that detects trackpad swipe gestures and translates them into workspace-switching commands for [AeroSpace](https://github.com/nikitabobko/AeroSpace), the tiling window manager for macOS.
 
 ## Why AeroGesture?
 
 There are existing tools like [SwipeAeroSpace](https://github.com/MediosZ/SwipeAeroSpace) that provide gesture-based workspace switching. AeroGesture takes a different approach:
 
-- **CLI-first, no GUI** — Runs as a pure background daemon with zero menu bar clutter. No `.app` bundle, no Dock icon, no GUI framework overhead.
-- **launchd-native** — Designed to run as a macOS launchd service. The system manages its lifecycle automatically — starts on login, restarts on crash, stops on shutdown.
-- **Lower resource footprint** — No GUI event loop or Cocoa application lifecycle. Just a focused process that listens for gestures and talks to AeroSpace over a Unix socket.
-- **TOML-based configuration** — All settings live in a simple config file. Change behavior without rebuilding or restarting — just send a `SIGHUP` to reload.
-- **Composable** — As a CLI tool, it integrates naturally with shell scripts, dotfile managers, and Nix/Homebrew workflows. No drag-and-drop installation or manual permission clicks beyond the initial accessibility grant.
+- **CLI-first, no GUI**. Runs as a pure background daemon with zero menu bar clutter. No `.app` bundle, no Dock icon, no GUI framework overhead.
+- **launchd-native**. Designed to run as a macOS launchd service. The system manages its lifecycle automatically. It starts on login, restarts on crash, stops on shutdown.
+- **Lower resource footprint**. No GUI event loop or Cocoa application lifecycle. Just a focused process that listens for gestures and talks to AeroSpace over a Unix socket.
+- **TOML-based configuration**. All settings live in a simple config file. Change behavior without rebuilding or restarting by sending a `SIGHUP` to reload.
+- **Composable**. As a CLI tool, it integrates naturally with shell scripts, dotfile managers, and Nix/Homebrew workflows. No drag-and-drop installation or manual permission clicks beyond the initial accessibility grant.
 
 ## Prerequisites
 
